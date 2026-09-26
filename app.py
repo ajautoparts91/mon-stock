@@ -1,65 +1,133 @@
 import streamlit as st
 import pandas as pd
 
-# Configuration de la page
+# --- 1. CONFIGURATION DE LA PAGE ---
 st.set_page_config(
-    page_title="VHU Executive - Spécial Moteurs",
-    page_icon="⚙️",
+    page_title="VHU Executive · Arbitrage & Gestion de Parc",
+    page_icon="🚗",
     layout="wide"
 )
 
-st.title("⚙️ VHU Executive · Spécial Moteurs & Agent IA")
-st.markdown("Pilotage de l'inventaire dédié exclusivement aux moteurs et optimisation des annonces.")
+# --- 2. BARRE LATÉRALE (SIDEBAR) ---
+with st.sidebar:
+    st.markdown("### 📂 Mise à jour de l'inventaire Opisto")
+    st.text("Importer le dernier export CSV Opisto")
+    
+    uploaded_file = st.file_uploader("Upload", type=["csv"], label_visibility="collapsed")
+    st.caption("200MB per file · CSV")
+    
+    st.markdown("---")
+    st.markdown("### 🔍 Filtres d'Arbitrage")
+    
+    decisions_ia = st.multiselect(
+        "Filtrer par Décision IA",
+        ["Recyclage / Ferraille", "Pépites à Auditer", "Capital Bloqué (>1 an)", "Rotation Rapide"],
+        default=[]
+    )
+    
+    emplacement_filter = st.text_input("Filtrer par Emplacement / Alley (ex: A-01)", "")
+    
+    st.markdown("---")
+    st.markdown("🤖 **Agent IA :** `gemini-3.8-flash`")
+    st.markdown("🟢 **Statut :** Connecté")
 
-# Données de stock recentrées uniquement sur les MOTEURS
-@st.cache_data
-def load_data():
-    return pd.DataFrame({
-        'Reference': ['MOT-BMW-N47', 'MOT-PEG-DV6', 'MOT-AUD-20T', 'MOT-REN-15DC', 'MOT-VW-20T', 'MOT-FRD-16TC'],
-        'Piece': ['Moteur BMW N47', 'Moteur Peugeot 1.6 HDi', 'Moteur Audi 2.0 TDI', 'Moteur Renault 1.5 dCi', 'Moteur VW 2.0 TDI', 'Moteur Ford 1.6 TDCi'],
-        'Kilometrage': ['142 000 km', '110 000 km', '165 000 km', '190 000 km', '130 000 km', '145 000 km'],
-        'Valeur_Estimee': [1800, 1300, 1450, 950, 1600, 1100],
-        'Jours_En_Stock': [45, 30, 60, 120, 15, 75],
-        'Statut': ['Rapide', 'Rapide', 'Standard', 'Dormant', 'Pépite', 'Standard']
-    })
+# --- 3. EN-TÊTE PRINCIPAL ---
+st.title("📊 Arbitrage Financier & Gestion de Parc")
+st.markdown("<div style='margin-bottom: 20px;'></div>", unsafe_allow_html=True)
 
-df = load_data()
+# --- 4. BARRE DE KPI FINANCIERS ---
+col1, col2, col3, col4 = st.columns(4)
 
-# Barre de KPI claire
-col1, col2, col3 = st.columns(3)
 with col1:
-    st.metric("💰 Valeur Totale des Moteurs", f"{df['Valeur_Estimee'].sum():,.0f} €")
+    st.metric(
+        label="Stock Total Moteurs",
+        value="215 180 €",
+        delta="↑ 165 unités"
+    )
+
 with col2:
-    st.metric("📦 Moteurs en Stock", len(df))
+    st.metric(
+        label="Moteurs A Recycler/Ferraille",
+        value="2 unités",
+        delta="Valorisation catalogue: 589 €",
+        delta_color="off"
+    )
+
 with col3:
-    dormant = df[df['Jours_En_Stock'] > 90]['Valeur_Estimee'].sum()
-    st.metric("⏳ Capital Dormant (>90j)", f"{dormant:,.0f} €")
+    st.metric(
+        label="Pépites Opisto à Auditer",
+        value="15 unités",
+        delta="Trésorerie: 29,177 €",
+        delta_color="normal"
+    )
 
-st.divider()
+with col4:
+    st.metric(
+        label="Capital Bloqué > 1 An",
+        value="25 818 €",
+        delta="12.0% du parc",
+        delta_color="inverse"
+    )
 
-# Tableau et Graphique natif Streamlit
-col_a, col_b = st.columns(2)
+st.markdown("<div style='margin-bottom: 30px;'></div>", unsafe_allow_html=True)
 
-with col_a:
-    st.subheader("📋 Inventaire des Moteurs")
-    st.dataframe(df, use_container_width=True, hide_index=True)
+# --- 5. RECOMMANDATIONS STRATÉGIQUES IA ---
+st.subheader("🧠 Recommandations Stratégiques IA")
 
-with col_b:
-    st.subheader("📊 Valeur par Moteur (€)")
-    st.bar_chart(df.set_index('Piece')['Valeur_Estimee'])
+col_rec1, col_rec2 = st.columns(2)
 
-st.divider()
+with col_rec1:
+    st.markdown("""
+    <div style="background-color: #fdf2f2; border-left: 5px solid #ef4444; padding: 20px; border-radius: 8px; height: 100%;">
+        <h4 style="color: #991b1b; margin-top:0;">♻️ ORDRE DE DÉSTOCKAGE / RECYCLAGE</h4>
+        <p style="font-size: 14px; color: #334155;">
+            <b>2 moteurs</b> ont dépassé 1 an en stock avec un prix unitaires faible. 
+            Leur maintien en rack coûte plus cher en surface de stockage que leur valeur nette.
+        </p>
+        <p style="font-size: 13px; font-weight: 600; color: #1e293b; margin-bottom: 5px;">
+            Top Emplacements à libérer en priorité :
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Petit tableau interne pour les emplacements à libérer
+    df_emp = pd.DataFrame({
+        'Emplacement': ['MAG R2/A9/E0', 'MAG R1/B4/C2'],
+        'count': [1, 1]
+    })
+    st.dataframe(df_emp, use_container_width=True, hide_index=True)
 
-# Section Assistant IA Gemini (3.8-flash)
-st.subheader("🤖 Assistant IA Gemini (Spécial Moteurs)")
+with col_rec2:
+    st.markdown("""
+    <div style="background-color: #eff6ff; border-left: 5px solid #3b82f6; padding: 20px; border-radius: 8px; height: 100%;">
+        <h4 style="color: #1e40af; margin-top:0;">🔍 AUDIT QUALITÉ OPISTO (Booster la Visibilité Web)</h4>
+        <p style="font-size: 14px; color: #334155;">
+            <b>15 moteurs à forte valeur (>1000€)</b> dorment depuis plus de 6 mois. Ils ont un fort potentiel de vente sur Opisto.
+        </p>
+        <hr style="border: 0; border-top: 1px solid #cbd5e1; margin: 15px 0;">
+        <p style="font-size: 13px; color: #1e293b; margin: 0;">
+            <b>Actions Ventes :</b> Vérifier que les codes moteurs OEM originaux sont saisis et rajouter 3 à 4 photos de qualité pour déclencher l'achat en ligne.
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
 
-piece_choisie = st.selectbox("Sélectionnez un moteur pour action rapide :", df['Piece'])
+st.markdown("---")
 
-if st.button("✨ Générer l'annonce Opisto & Fiche Technique"):
-    with st.spinner("L'agent Gemini 3.8-flash analyse le moteur..."):
-        st.success("Fiche technique et annonce générées avec succès :")
-        st.markdown(f"""
-        - **Moteur sélectionné :** `{piece_choisie}`
-        - **Annonce Opisto optimisée :** *Moteur d'occasion certifié VHU, testé sur banc, compressions vérifiées. Vendu nu ou avec accessoires selon arrivage. Garantie 3 mois incluse. Idéal échange standard.*
-        - **Conseil IA :** Prix aligné sur le marché actuel, rotation optimale.
-        """)
+# --- 6. TABLEAU DE DONNÉES DÉTAILLÉ (Dynamique si CSV uploadé) ---
+st.subheader("📋 Inventaire Détaillé des Moteurs")
+
+if uploaded_file is not None:
+    # Lecture du fichier CSV uploadé par l'utilisateur
+    df_user = pd.read_csv(uploaded_file)
+    st.dataframe(df_user, use_container_width=True, hide_index=True)
+else:
+    # Données par défaut si aucun fichier n'est encore uploadé
+    df_default = pd.DataFrame({
+        'Référence': ['MOT-BMW-N47', 'MOT-AUD-20T', 'MOT-PEG-DV6', 'MOT-REN-15DCI'],
+        'Intitulé': ['Moteur BMW N47 2.0d', 'Moteur Audi 2.0 TDI', 'Moteur Peugeot 1.6 HDi', 'Moteur Renault 1.5 dCi'],
+        'Emplacement': ['MAG R2/A9/E0', 'MAG R1/B2/A1', 'MAG R3/C4/E5', 'MAG R2/A5/B3'],
+        'Valeur (€)': [1800, 1450, 1300, 950],
+        'Ancienneté (jours)': [420, 190, 45, 120],
+        'Statut IA': ['Capital Bloqué > 1 An', 'Pépite à Auditer', 'Rotation Rapide', 'Recyclage / Ferraille']
+    })
+    st.dataframe(df_default, use_container_width=True, hide_index=True)
