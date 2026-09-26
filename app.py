@@ -2,14 +2,14 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 
-# --- 1. CONFIGURATION DE LA PAGE (LAYOUT WIDE SANS SIDEBAR) ---
+# --- 1. CONFIGURATION DE LA PAGE ---
 st.set_page_config(
     page_title="VHU Executive · Gestion Moteurs",
     page_icon="🚗",
     layout="wide"
 )
 
-# Masquer complètement la barre latérale par CSS pour un design épuré
+# Masquer la barre latérale par CSS
 st.markdown(
     """
     <style>
@@ -29,7 +29,7 @@ def load_data():
 try:
     df_user = load_data()
 except Exception as e:
-    st.error(f"Erreur : Impossible de charger le fichier 'stock 9-2023.xlsx' depuis GitHub. Assurez-vous qu'il est présent à la racine du dépôt. ({e})")
+    st.error(f"Erreur : Impossible de charger le fichier 'stock 9-2023.xlsx' depuis GitHub ({e})")
     df_user = None
 
 if df_user is not None and not df_user.empty:
@@ -39,6 +39,19 @@ if df_user is not None and not df_user.empty:
         df_user['Anciennete_Jours'] = (ref_date - df_user['Date creation']).dt.days
     else:
         df_user['Anciennete_Jours'] = 0
+
+    # Tranches d'ancienneté claires pour les filtres
+    def get_tranche_age(jours):
+        if jours <= 90:
+            return "Moins de 3 mois (Récent)"
+        elif jours <= 180:
+            return "3 à 6 mois"
+        elif jours <= 365:
+            return "6 mois à 1 an"
+        else:
+            return "Plus de 1 an (Dormant)"
+
+    df_user['Tranche_Age'] = df_user['Anciennete_Jours'].apply(get_tranche_age)
 
     # Attribution des statuts et émojis météo
     def assign_statut(row):
@@ -58,120 +71,98 @@ if df_user is not None and not df_user.empty:
 
     df_user['Statut_IA'] = df_user.apply(assign_statut, axis=1)
 
-    # Calculs pour les KPIs du haut
+    # --- 3. CALCULS POUR LES KPIs PERTINENTS ---
     total_val = df_user['PrixTotalTTC'].sum() if 'PrixTotalTTC' in df_user.columns else 0
     total_unites = len(df_user)
+    prix_moyen = total_val / total_unites if total_unites > 0 else 0
     
-    recyclage_df = df_user[df_user['Statut_IA'] == '♻️ À Recycler / Baisser Prix']
-    recyclage_count = len(recyclage_df)
-    recyclage_val = recyclage_df['PrixTotalTTC'].sum() if 'PrixTotalTTC' in df_user.columns else 0
+    age_moyen = df_user['Anciennete_Jours'].mean() if 'Anciennete_Jours' in df_user.columns else 0
     
-    pepites_df = df_user[df_user['Statut_IA'] == '🟠 Pépites à Auditer (Forte Demande)']
-    pepites_count = len(pepites_df)
-    pepites_val = pepites_df['PrixTotalTTC'].sum() if 'PrixTotalTTC' in df_user.columns else 0
-    
-    bloque_df = df_user[df_user['Statut_IA'] == '🔴 Capital Bloqué > 1 An']
+    bloque_df = df_user[df_user['Anciennete_Jours'] > 365]
     bloque_count = len(bloque_df)
     bloque_val = bloque_df['PrixTotalTTC'].sum() if 'PrixTotalTTC' in df_user.columns else 0
+    bloque_pct = (bloque_val / total_val * 100) if total_val > 0 else 0
 
-    # --- 3. EN-TÊTE PRINCIPAL ---
+    # --- 4. EN-TÊTE PRINCIPAL ---
     st.title("📊 Arbitrage Financier & Gestion de Parc Moteurs")
     st.markdown("<div style='margin-bottom: 10px;'></div>", unsafe_allow_html=True)
 
-    # --- 4. INDICATEURS HAUT DE PAGE (KPIs) ---
-    col1, col2, col3, col4 = st.columns(4)
+    # --- 5. TABLEAU DE BORD DES KPIs (6 Indicateurs Clés) ---
+    c1, c2, c3, c4, c5, c6 = st.columns(6)
 
-    with col1:
-        st.metric(
-            label="Stock Total Moteurs",
-            value=f"{total_val:,.0f} €".replace(',', ' '),
-            delta=f"↑ {total_unites} unités"
-        )
-
-    with col2:
-        st.metric(
-            label="Moteurs À Recycler / Baisser Prix",
-            value=f"{recyclage_count} unités",
-            delta=f"Valorisation: {recyclage_val:,.0f} €".replace(',', ' '),
-            delta_color="off"
-        )
-
-    with col3:
-        st.metric(
-            label="Pépites à Auditer",
-            value=f"{pepites_count} unités",
-            delta=f"Trésorerie: {pepites_val:,.0f} €".replace(',', ' '),
-            delta_color="normal"
-        )
-
-    with col4:
-        st.metric(
-            label="Capital Bloqué > 1 An",
-            value=f"{bloque_val:,.0f} €".replace(',', ' '),
-            delta=f"{bloque_count} moteurs",
-            delta_color="inverse"
-        )
+    with c1:
+        st.metric("Valeur Totale Stock", f"{total_val:,.0f} €".replace(',', ' '))
+    with c2:
+        st.metric("Volume Total", f"{total_unites} unités")
+    with c3:
+        st.metric("Prix Moyen / Moteur", f"{prix_moyen:,.0f} €".replace(',', ' '))
+    with c4:
+        st.metric("Âge Moyen en Stock", f"{age_moyen:.0f} jours")
+    with c5:
+        st.metric("Stock > 1 An (Valeur)", f"{bloque_val:,.0f} €".replace(',', ' '), delta=f"{bloque_pct:.1f}% du parc", delta_color="inverse")
+    with c6:
+        st.metric("Moteurs Dormants", f"{bloque_count} unités", delta="À brader / recycler", delta_color="off")
 
     st.markdown("---")
 
-    # --- 5. FILTRES AU HAUT DU TABLEAU (EN COLONNES) ---
-    st.markdown("### 🔍 Filtres de Pilotage")
-    f_col1, f_col2 = st.columns(2)
+    # --- 6. FILTRES HAUT DE TABLEAU SIMPLIFIÉS ET STRATÉGIQUES ---
+    st.markdown("### 🔍 Filtres & Sélection de Parc")
+    f_col1, f_col2, f_col3 = st.columns(3)
     
     with f_col1:
-        vue_strategique = st.selectbox(
-            "Filtrer par Statut / Météo",
-            [
-                "Vue Globale (Tout afficher)", 
-                "🟢 Rotation Rapide", 
-                "🟠 Pépites à Auditer (Forte Demande)", 
-                "🔴 Capital Bloqué > 1 An", 
-                "♻️ À Recycler / Baisser Prix"
-            ]
+        tranche_filtre = st.selectbox(
+            "Filtrer par Ancienneté",
+            ["Tous les âges", "Moins de 3 mois (Récent)", "3 à 6 mois", "6 mois à 1 an", "Plus de 1 an (Dormant)"]
         )
         
     with f_col2:
-        seuil_anciennete = st.slider(
-            "Filtrer par ancienneté minimum en stock (jours)", 
-            min_value=0, 
-            max_value=1000, 
-            value=0, 
-            step=30
+        statut_filtre = st.selectbox(
+            "Filtrer par Statut / Météo",
+            ["Tous les statuts", "🟢 Rotation Rapide", "🟠 Pépites à Auditer (Forte Demande)", "🔴 Capital Bloqué > 1 An", "♻️ À Recycler / Baisser Prix"]
         )
+
+    with f_col3:
+        # Recherche textuelle pour Code Moteur ou Marque/Modèle
+        recherche_texte = st.text_input("🔍 Rechercher (Code moteur, marque, modèle...)", "")
 
     # Application des filtres
     filtered_df = df_user.copy()
-    if vue_strategique != "Vue Globale (Tout afficher)":
-        filtered_df = filtered_df[filtered_df['Statut_IA'] == vue_strategique]
+    
+    if tranche_filtre != "Tous les âges":
+        filtered_df = filtered_df[filtered_df['Tranche_Age'] == tranche_filtre]
         
-    if seuil_anciennete > 0:
-        filtered_df = filtered_df[filtered_df['Anciennete_Jours'] >= seuil_anciennete]
+    if statut_filtre != "Tous les statuts":
+        filtered_df = filtered_df[filtered_df['Statut_IA'] == statut_filtre]
+        
+    if recherche_texte:
+        mask = filtered_df.astype(str).apply(lambda x: x.str.contains(recherche_texte, case=False)).any(axis=1)
+        filtered_df = filtered_df[mask]
 
-    st.markdown("<div style='margin-bottom: 15px;'></div>", unsafe_allow_html=True)
+    st.markdown("<div style='margin-bottom: 10px;'></div>", unsafe_allow_html=True)
     
-    # --- 6. TABLEAU DÉTAILLÉ ---
-    st.subheader(f"📋 Inventaire Détaillé ({len(filtered_df)} moteurs affichés)")
+    # --- 7. TABLEAU DÉTAILLÉ (AVEC CODE MOTEUR, MARQUE ET COMPATIBILITÉS) ---
+    st.subheader(f"📋 Inventaire Détaillé ({len(filtered_df)} moteurs correspondants)")
     
-    display_cols = [c for c in ['Id', 'Marque', 'Modele', 'Moteur', 'PrixTotalTTC', 'Anciennete_Jours', 'Emplacement', 'Statut_IA'] if c in filtered_df.columns]
-    if not display_cols:
-        display_cols = filtered_df.columns.tolist()
+    # Colonnes orientées code moteur, marque, modèle et compatibilité description
+    default_cols = ['Id', 'Marque', 'Modele', 'Moteur', 'Annee', 'PrixTotalTTC', 'Anciennete_Jours', 'Emplacement', 'Description', 'Statut_IA']
+    display_cols = [c for c in default_cols if c in filtered_df.columns]
 
     st.dataframe(filtered_df[display_cols], use_container_width=True, hide_index=True)
 
     st.markdown("---")
 
-    # --- 7. ANALYSE DÉTAILLÉE EN BAS DE TABLEAU ---
-    st.subheader("💡 Analyse & Recommandations Internes")
+    # --- 8. ANALYSE ET RECOMMANDATIONS EN BAS DE TABLEAU ---
+    st.subheader("💡 Analyse & Recommandations Opérationnelles")
     
     col_a, col_b = st.columns(2)
     
     with col_a:
         st.markdown("""
         <div style="background-color: #fef2f2; border-left: 5px solid #ef4444; padding: 15px; border-radius: 6px;">
-            <h4 style="color: #991b1b; margin-top:0;">🔴 Stock Dormant & Opportunités de Baisse de Prix</h4>
+            <h4 style="color: #991b1b; margin-top:0;">🔴 Actions sur le Stock Dormant (> 1 An)</h4>
             <p style="font-size: 13px; color: #334155;">
-                Les moteurs marqués de l'indicateur rouge ou à recycler immobilisent de l'espace inutilement. 
-                <b>Recommandation :</b> Réduire leur prix de 15% à 20% dès cette semaine pour déclencher une vente rapide ou libérer l'emplacement en fin de vie.
+                Ce stock immobilise de la trésorerie et de l'espace physique. 
+                <b>Stratégie :</b> Vérifiez les descriptions pour lister toutes les affectations véhicules secondaires (compatibilités croisées) et appliquez une baisse de prix incitative sur les plateformes pour libérer les emplacements de stockage.
             </p>
         </div>
         """, unsafe_allow_html=True)
@@ -179,10 +170,10 @@ if df_user is not None and not df_user.empty:
     with col_b:
         st.markdown("""
         <div style="background-color: #f0fdf4; border-left: 5px solid #22c55e; padding: 15px; border-radius: 6px;">
-            <h4 style="color: #166534; margin-top:0;">🟢 / 🟠 Pépites & Moteurs à Forte Demande</h4>
+            <h4 style="color: #166534; margin-top:0;">🟢 / 🟠 Optimisation des Pépites & Rotation</h4>
             <p style="font-size: 13px; color: #334155;">
-                Les moteurs à forte valeur et bonne rotation génèrent la trésorerie clé. 
-                <b>Recommandation :</b> S'assurer que leurs références OEM sont impeccables et qu'ils bénéficient d'une visibilité maximale sur les plateformes de vente (Opisto).
+                Les moteurs récents ou à forte valeur font vivre la marge. 
+                <b>Stratégie :</b> S'assurer que le code moteur exact et les références constructeurs (`Ref constr`) sont bien mis en avant pour capter les recherches multi-marques des clients professionnels et particuliers.
             </p>
         </div>
         """, unsafe_allow_html=True)
